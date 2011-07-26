@@ -265,6 +265,17 @@ typedef struct dma_reg_map {
 #define DMA_CCR_TCIE                    BIT(DMA_CCR_TCIE_BIT)
 #define DMA_CCR_EN                      BIT(DMA_CCR_EN_BIT)
 
+/**
+ * Encodes the reason why a DMA interrupt was called.
+ * @see dma_get_irq_cause()
+ */
+typedef enum dma_irq_cause {
+    DMA_TRANSFER_COMPLETE,      /**< Transfer is complete. */
+    DMA_TRANSFER_HALF_COMPLETE, /**< Transfer is half complete. */
+    DMA_TRANSFER_ERROR,         /**< Error occurred during transfer. */
+    DMA_NO_CAUSE,               /**< No interrupt was invoked. */
+} dma_irq_cause;
+
 /*
  * Devices
  */
@@ -274,6 +285,7 @@ typedef struct dma_handler_config {
     void (*handler)(void);      /**< User-specified channel interrupt
                                      handler */
     nvic_irq_num irq_line;      /**< Channel's NVIC interrupt number */
+    dma_irq_cause irq_cause;
 } dma_handler_config;
 
 /** DMA device type */
@@ -352,16 +364,6 @@ void dma_attach_interrupt(dma_dev *dev,
                           dma_channel channel,
                           void (*handler)(void));
 void dma_detach_interrupt(dma_dev *dev, dma_channel channel);
-
-/**
- * Encodes the reason why a DMA interrupt was called.
- * @see dma_get_irq_cause()
- */
-typedef enum dma_irq_cause {
-    DMA_TRANSFER_COMPLETE,      /**< Transfer is complete. */
-    DMA_TRANSFER_HALF_COMPLETE, /**< Transfer is half complete. */
-    DMA_TRANSFER_ERROR,         /**< Error occurred during transfer. */
-} dma_irq_cause;
 
 dma_irq_cause dma_get_irq_cause(dma_dev *dev, dma_channel channel);
 

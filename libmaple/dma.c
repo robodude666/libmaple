@@ -42,13 +42,13 @@
 static dma_dev dma1 = {
     .regs     = DMA1_BASE,
     .clk_id   = RCC_DMA1,
-    .handlers = {{ .handler = NULL, .irq_line = NVIC_DMA_CH1 },
-                 { .handler = NULL, .irq_line = NVIC_DMA_CH2 },
-                 { .handler = NULL, .irq_line = NVIC_DMA_CH3 },
-                 { .handler = NULL, .irq_line = NVIC_DMA_CH4 },
-                 { .handler = NULL, .irq_line = NVIC_DMA_CH5 },
-                 { .handler = NULL, .irq_line = NVIC_DMA_CH6 },
-                 { .handler = NULL, .irq_line = NVIC_DMA_CH7 }}
+    .handlers = {{ .handler = NULL, .irq_line = NVIC_DMA_CH1, .irq_cause = DMA_NO_CAUSE },
+                 { .handler = NULL, .irq_line = NVIC_DMA_CH2, .irq_cause = DMA_NO_CAUSE },
+                 { .handler = NULL, .irq_line = NVIC_DMA_CH3, .irq_cause = DMA_NO_CAUSE },
+                 { .handler = NULL, .irq_line = NVIC_DMA_CH4, .irq_cause = DMA_NO_CAUSE },
+                 { .handler = NULL, .irq_line = NVIC_DMA_CH5, .irq_cause = DMA_NO_CAUSE },
+                 { .handler = NULL, .irq_line = NVIC_DMA_CH6, .irq_cause = DMA_NO_CAUSE },
+                 { .handler = NULL, .irq_line = NVIC_DMA_CH7, .irq_cause = DMA_NO_CAUSE }}
 };
 /** DMA1 device */
 dma_dev *DMA1 = &dma1;
@@ -57,11 +57,11 @@ dma_dev *DMA1 = &dma1;
 static dma_dev dma2 = {
     .regs     = DMA2_BASE,
     .clk_id   = RCC_DMA2,
-    .handlers = {{ .handler = NULL, .irq_line = NVIC_DMA2_CH1   },
-                 { .handler = NULL, .irq_line = NVIC_DMA2_CH2   },
-                 { .handler = NULL, .irq_line = NVIC_DMA2_CH3   },
-                 { .handler = NULL, .irq_line = NVIC_DMA2_CH_4_5 },
-                 { .handler = NULL, .irq_line = NVIC_DMA2_CH_4_5 }} /* !@#$ */
+    .handlers = {{ .handler = NULL, .irq_line = NVIC_DMA2_CH1,    .irq_cause = DMA_NO_CAUSE },
+                 { .handler = NULL, .irq_line = NVIC_DMA2_CH2,    .irq_cause = DMA_NO_CAUSE },
+                 { .handler = NULL, .irq_line = NVIC_DMA2_CH3,    .irq_cause = DMA_NO_CAUSE },
+                 { .handler = NULL, .irq_line = NVIC_DMA2_CH_4_5, .irq_cause = DMA_NO_CAUSE },
+                 { .handler = NULL, .irq_line = NVIC_DMA2_CH_4_5, .irq_cause = DMA_NO_CAUSE }} /* !@#$ */
 };
 /** DMA2 device */
 dma_dev *DMA2 = &dma2;
@@ -201,23 +201,41 @@ void dma_detach_interrupt(dma_dev *dev, dma_channel channel) {
 }
 
 /**
- * @brief Discover the reason why a DMA interrupt was called.
+ * @brief Public method to discover the reason why a DMA interrupt
+ * was called.
  *
- * You may only call this function within an attached interrupt
- * handler for the given channel.
+ * You must have an attached interrupt in order for this to return
+ * a useful (non-DMA_NO_CAUSE) value.
+ *
+ * @brief dev DMA device
+ * @brief channel Channel whose interrupt is being handled.
+ * @return Reason why the interrupt fired.
+ * @see dma_attach_interrupt()
+ * @see dma_irq_cause
+ */
+dma_irq_cause dma_get_irq_cause(dma_dev *dev, dma_channel channel) {
+    return dev->handlers[channel - 1].irq_cause;
+}
+
+/**
+ * @brief Helper function for discovering the reason why a DMA
+ * interrupt was called; not available for public use.
+ *
+ * This is a private function to help dispatch_handler()
  *
  * This function resets the internal DMA register state which encodes
- * the cause of the interrupt; consequently, it can only be called
- * once per interrupt handler invocation.
+ * the cause of the interrupt; consequently, it is only called once
+ * per interrupt handler invocation.
  *
  * @brief dev DMA device
  * @brief channel Channel whose interrupt is being handled.
  * @return Reason why the interrupt fired.
  * @sideeffect Clears channel status flags in dev->regs->ISR.
  * @see dma_attach_interrupt()
+ * @see dispatch_handler()
  * @see dma_irq_cause
  */
-dma_irq_cause dma_get_irq_cause(dma_dev *dev, dma_channel channel) {
+dma_irq_cause dma_compute_irq_cause(dma_dev *dev, dma_channel channel) {
     uint8 status_bits = dma_get_isr_bits(dev, channel);
 
     /* If the channel global interrupt flag is cleared, then
@@ -324,10 +342,14 @@ void dma_set_per_addr(dma_dev *dev, dma_channel channel, __io void *addr) {
  */
 
 static inline void dispatch_handler(dma_dev *dev, dma_channel channel) {
-    void (*handler)(void) = dev->handlers[channel - 1].handler;
+
+    dma_handler_config *handler_config = &dev->handlers[channel - 1];
+
+    handler_config->irq_cause = dma_compute_irq_cause(dev, channel);
+
+    void (*handler)(void) = handler_config->handler;
     if (handler) {
         handler();
-        dma_clear_isr_bits(dev, channel); /* in case handler doesn't */
     }
 }
 
